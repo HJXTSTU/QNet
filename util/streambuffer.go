@@ -130,27 +130,18 @@ type StreamBuffer interface {
 	Empty() bool
 
 	Undo()
-
-	InsertLen()
 }
-
-type UndoOffset int
 
 type stream struct {
 	buf []byte
 	off int
 	cur int
 
-	undoOffset UndoOffset
+	undoOffset int
 }
 
-func (this *stream) InsertLen() {
-	l := this.Len()
-	b := make([]byte, l)
-	copy(b, this.buf[this.cur:this.off])
-	this.Renew()
-	this.WriteInt(l)
-	this.Append(b)
+func (this *stream) mem() {
+	this.undoOffset = this.cur
 }
 
 func (this *stream) ReadLine() string {
@@ -159,7 +150,11 @@ func (this *stream) ReadLine() string {
 		endl++
 	}
 	start := this.cur
-	this.cur = endl + 1;
+	this.mem()
+	this.cur = endl;
+	if this.cur != this.off && this.buf[this.cur] == '\n' {
+		this.cur++
+	}
 	return string(this.buf[start:endl])
 }
 
@@ -188,8 +183,8 @@ func (this *stream) Empty() bool {
 
 func (this *stream) ReadByte() byte {
 	res := this.buf[this.cur]
+	this.mem()
 	this.cur++
-	this.undoOffset++
 	return res
 }
 func (this *stream) WriteByte(b byte) {
@@ -201,10 +196,15 @@ func (this *stream) ReadInt() int {
 	if this.Empty() {
 		panic(errors.New("Stream is empty."))
 	}
+
+	//fmt.Printf("Current:cur:%d\toff:%d\n", this.cur, this.off)
+	if this.cur+4 > this.off || this.cur < 0 || this.off < 0 {
+		panic(nil)
+	}
 	p := this.buf[this.cur:this.cur+4]
 	i := bytesToInt(p)
+	this.mem()
 	this.cur += 4
-	this.undoOffset += 4
 	return i
 }
 
@@ -219,8 +219,8 @@ func (this *stream) ReadFloat32() float32 {
 	}
 	p := this.buf[this.cur:this.cur+4]
 	f := bytesToFloat32(p)
+	this.mem()
 	this.cur += 4
-	this.undoOffset += 4
 	return f
 }
 
@@ -235,8 +235,8 @@ func (this *stream) ReadFloat64() float64 {
 	}
 	p := this.buf[this.cur:this.cur+8]
 	f := bytesToFloat64(p)
+	this.mem()
 	this.cur += 8
-	this.undoOffset += 8
 	return f
 }
 
@@ -260,17 +260,19 @@ func (this *stream) Renew() {
 }
 
 func (this *stream) Undo() {
-	this.cur -= int(this.undoOffset)
+	this.cur = this.undoOffset
 }
 
 func (this *stream) ReadNBytes(n int) []byte {
 	cur := this.cur
+	this.mem()
 	this.cur += n
 	if this.cur == this.off {
 		defer this.Renew()
 	}
 	res := make([]byte, n)
 	copy(res, this.buf[cur:cur+n])
+	//fmt.Printf("Current:cur:%d\toff:%d\n", this.cur, this.off)
 	return res
 }
 

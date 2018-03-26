@@ -48,8 +48,8 @@ func (this *QServer) SyncListen() {
 func (this *QServer) onAccept(conn net.Conn) {
 	token := connection.NewQToken(conn, this.onRead, this.onClose)
 	this.tokens.AddToken(token)
-	token.ReadAsync()
-	//this.listener.AcceptAsync(this.onAccept)
+	token.StartRead()
+	token.StartSend()
 }
 
 func (this *QServer) onRead(handle connection.TokenHandler, n int, bytes []byte) {

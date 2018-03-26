@@ -19,3 +19,7 @@ func GlobalExitChan()<-chan os.Signal{
 	})
 	return signal_exit
 }
+
+func GlobalCloseExitChan(){
+	close(signal_exit)
+}
