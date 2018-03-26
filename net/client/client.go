@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	BUFFER_SIZE = 2048
+	BUFFER_SIZE = 32768
 	RCHAN_SIZE  = 128
 	WCHAN_SIZE  = 128
 )
