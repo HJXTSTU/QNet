@@ -24,7 +24,7 @@ type Closure func()
 
 func StartGoroutines(f Closure){
 	go func() {
-		GlobalWaitGroup().Add(1)
+		goroutines_wait.Add(1)
 		f()
 		goroutines_wait.Done()
 	}()

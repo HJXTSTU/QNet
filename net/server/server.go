@@ -15,12 +15,10 @@ type QServerHandle interface {
 
 	Close()
 
-	SetProcesser(QProcesser)
+	SetProcesser(ProcesseFunc)
 }
 
-type QProcesser interface {
-	Processe(connection.TokenHandler, int, []byte)
-}
+type ProcesseFunc	func(connection.TokenHandler, int, []byte)
 
 type QWriter interface {
 	Send([]byte)
@@ -29,7 +27,7 @@ type QWriter interface {
 type QServer struct {
 	listener  listener.ListenerHandle
 	tokens    connection.TokenPoolHandler
-	processer QProcesser
+	processeFunc ProcesseFunc
 }
 
 func (this *QServer)Close(){
@@ -53,11 +51,11 @@ func (this *QServer) onAccept(conn net.Conn) {
 }
 
 func (this *QServer) onRead(handle connection.TokenHandler, n int, bytes []byte) {
-	this.processer.Processe(handle, n, bytes)
+	this.processeFunc(handle, n, bytes)
 }
 
-func (this *QServer) SetProcesser(p QProcesser) {
-	this.processer = p
+func (this *QServer) SetProcesser(p ProcesseFunc) {
+	this.processeFunc = p
 }
 
 func (this *QServer) onClose(handle connection.TokenHandler) {
@@ -66,7 +64,6 @@ func (this *QServer) onClose(handle connection.TokenHandler) {
 	this.tokens.DeleteToken(handle)
 	this.listener.ReleaseConn()
 	fmt.Println("Remain:",this.tokens.Len())
-
 }
 
 func NewQServer(address string) QServerHandle {

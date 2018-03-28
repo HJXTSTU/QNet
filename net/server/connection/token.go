@@ -5,13 +5,12 @@ import (
 	"wwt/util"
 	"sync"
 	"wwt/ctrl"
-	"fmt"
 )
 
 const (
 	BUFFER_SIZE = 32768
-	RCHAN_SIZE  = 128
-	WCHAN_SIZE  = 128
+	RCHAN_SIZE  = 1024
+	WCHAN_SIZE  = 1024
 )
 
 type ReadCallback func(TokenHandler, int, []byte)
@@ -73,62 +72,72 @@ type TokenHandler interface {
 	StartSend()
 
 	Write([]byte)
-
-	read(b []byte) (int, error)
 }
 
 type RChan chan []byte
 type WChan chan []byte
 
 type QToken struct {
-	conn     net.Conn
-	onRead   ReadCallback
-	onClose  CloseCallback
+	conn    net.Conn
+	onRead  ReadCallback
+	onClose CloseCallback
+
+	r_exit   chan struct{}
 	r_stream util.StreamBuffer
 	r_chan   RChan
 
-	w_exit  chan struct{}
-	w_chan  WChan
-	w_group sync.WaitGroup
+	w_exit chan struct{}
+	w_chan WChan
+
+	task_group sync.WaitGroup
+	close_once sync.Once
 }
 
 func (this *QToken) Write(b []byte) {
+	defer func(){
+		_ = recover()
+	}()
 	select {
 	case <-this.w_exit:
 		return
 	default:
-		this.w_group.Add(1)
 		this.w_chan <- b
-		this.w_group.Done()
 	}
 
 }
 
-func (this *QToken) startSend() {
+func (this *QToken) sendAsync() {
 	defer func() {
-		if err := recover(); err != nil {
-			fmt.Println(err.(error))
-		}
+		this.task_group.Done()
+		_ = recover() //	捕获异常	改层易触发conn close 异常
+		this.Close()
 	}()
-	for b := range this.w_chan {
-		if b != nil {
-			stream := util.NewStreamBuffer()
-			stream.WriteInt(len(b))
-			stream.Append(b)
-			n, err := this.conn.Write(stream.Bytes())
-			if n <= 0 || err != nil {
-				panic(err)
-				break
+
+	for {
+		select {
+		case <-this.w_exit:
+			panic(nil)
+			return
+		case b := <-this.w_chan:
+			if b != nil {
+				stream := util.NewStreamBuffer()
+				stream.WriteInt(len(b))
+				stream.Append(b)
+				n, err := this.conn.Write(stream.Bytes())
+				if n <= 0 || err != nil {
+					panic(err)
+					return
+				}
+			} else {
+				return
 			}
-		} else {
-			break
 		}
 	}
 }
 
 func (this *QToken) StartSend() {
 	ctrl.StartGoroutines(func() {
-		this.startSend()
+		this.sendAsync()
 	})
 }
 
@@ -140,25 +149,29 @@ func (this *QToken) RemoteAddr() net.Addr {
 	return this.conn.RemoteAddr()
 }
 
-func (this *QToken) readAsync(handle TokenHandler) {
+func (this *QToken) readAsync() {
 	defer func() {
-		err := recover().(error)
-		if err.Error() == "EOF" {
-			handle.OnClose(handle)
-		}
+		this.task_group.Done()
+		_ = recover()
+		this.Close()
 	}()
 
 	for {
-		buf := make([]byte, BUFFER_SIZE)
-		n, err := handle.read(buf)
-		if n <= 0 || err != nil {
-			panic(err)
-			break;
+		select {
+		case <-this.r_exit:
+			panic(nil)
+			return
+		default:
+			b := make([]byte, BUFFER_SIZE)
+			n, err := this.conn.Read(b) //	可引发连接异常
+			if n <= 0 || err != nil {
+				panic(err)
+				return
+			}
+			this.r_chan <- b[:n]
 		}
-		//fmt.Println(buf[:n])
-		this.r_chan <- buf[:n]
+
 	}
-	// TODO::err process
 }
 
 func (this *QToken) StartRead() {
@@ -166,30 +179,40 @@ func (this *QToken) StartRead() {
 		this.processRead()
 	})
 	ctrl.StartGoroutines(func() {
-		this.readAsync(this)
+		this.readAsync()
 	})
 }
 
 func (this *QToken) processRead() {
-	for b := range this.r_chan {
-		if b != nil {
-			this.r_stream.Append(b)
-			for this.r_stream.Len() > 4 {
-				length := this.r_stream.ReadInt()
-				//	数据包已经完整
-				if !this.r_stream.Empty() && length <= this.r_stream.Len() {
-					data := this.r_stream.ReadNBytes(length)
-					this.onRead(this, length, data)
-				} else {
-					this.r_stream.Undo()
-					break
+	defer func() {
+		this.task_group.Done()
+		_ = recover() //	捕获异常
+		//	TODO::Nothing
+	}()
+	for {
+		select {
+		case <-this.r_exit:
+			panic(nil)
+			return
+		case b := <-this.r_chan:
+			if b != nil {
+				this.r_stream.Append(b)
+				for this.r_stream.Len() > 4 {
+					length := this.r_stream.ReadInt()
+					//	数据包已经完整
+					if !this.r_stream.Empty() && length <= this.r_stream.Len() {
+						data := this.r_stream.ReadNBytes(length)
+						this.onRead(this, length, data)
+					} else {
+						this.r_stream.Undo()
+						break
+					}
 				}
+			} else {
+				panic(nil)
+				return
 			}
-			if this.r_stream.Empty() {
-				this.r_stream.Renew()
-			}
-		} else {
-			break
+
 		}
 	}
 
@@ -202,13 +225,30 @@ func (this *QToken) OnClose(handle TokenHandler) {
 }
 
 func (this *QToken) Close() {
-	fmt.Println("Close:", this.conn.RemoteAddr())
-	close(this.r_chan)
-	this.conn.Close()
+	this.close_once.Do(func() {
+		close(this.r_exit) //	关闭对远端数据流的处理		影响到processRead方法		放弃从管道中读入数据并退出
+		close(this.w_exit) //	对上层应用关闭输入口	影响到Write方法	针对准备写入数据时被阻塞的goroutine
+		this.conn.Close()  //	关闭连接，readAsync,sendAsync会触发异常并退出
+		//	清理w_chan
+		ctrl.StartGoroutines(func() {
+			for  _ = range this.w_chan{
 
-	close(this.w_exit)
-	this.w_group.Wait()
-	close(this.w_chan)
+			}
+		})
+
+		//	清理r_chan
+		ctrl.StartGoroutines(func() {
+			for  _ = range this.r_chan{
+
+			}
+		})
+
+		this.task_group.Wait() //	等待该客户端所有任务	goroutuines	退出
+		close(this.r_chan) //	关闭处理数据流管道
+		close(this.w_chan) //	关闭发送数据流管道
+		this.OnClose(this)
+	})
+
 }
 
 func NewQToken(conn net.Conn, onRead ReadCallback, onClose CloseCallback) *QToken {
@@ -216,10 +256,14 @@ func NewQToken(conn net.Conn, onRead ReadCallback, onClose CloseCallback) *QToke
 		conn,
 		onRead,
 		onClose,
+		make(chan struct{}),
 		util.NewStreamBuffer(),
 		make(RChan, RCHAN_SIZE),
 		make(chan struct{}),
 		make(WChan, WCHAN_SIZE),
-		sync.WaitGroup{}}
+		sync.WaitGroup{},
+		sync.Once{},
+	}
+	token.task_group.Add(3)
 	return &token
 }
