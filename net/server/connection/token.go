@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	BUFFER_SIZE = 32768
+	BUFFER_SIZE = 2048
 	RCHAN_SIZE  = 1024
 	WCHAN_SIZE  = 1024
 )
@@ -163,6 +163,7 @@ func (this *QToken) readAsync() {
 			return
 		default:
 			b := make([]byte, BUFFER_SIZE)
+
 			n, err := this.conn.Read(b) //	可引发连接异常
 			if n <= 0 || err != nil {
 				panic(err)
