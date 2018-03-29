@@ -4,7 +4,7 @@ import (
 	"wwt/net/server/listener"
 	"wwt/net/server/connection"
 	"net"
-	"fmt"
+	"log"
 )
 
 type QServerHandle interface {
@@ -48,6 +48,7 @@ func (this *QServer) onAccept(conn net.Conn) {
 	this.tokens.AddToken(token)
 	token.StartRead()
 	token.StartSend()
+	log.Printf("QServer %p: New connection enter %s. Create token %p.\n",this,token.RemoteAddr(),&token)
 }
 
 func (this *QServer) onRead(handle connection.TokenHandler, n int, bytes []byte) {
@@ -60,10 +61,11 @@ func (this *QServer) SetProcesser(p ProcesseFunc) {
 
 func (this *QServer) onClose(handle connection.TokenHandler) {
 	//TODO::关闭TOKEN
-	handle.Close()
+	//handle.Close()
 	this.tokens.DeleteToken(handle)
 	this.listener.ReleaseConn()
-	fmt.Println("Remain:",this.tokens.Len())
+	log.Printf("QServer %p: Delete token %p. Remain: %d.\n",this,&handle,this.tokens.Len())
+	//fmt.Println("Remain:",this.tokens.Len())
 }
 
 func NewQServer(address string) QServerHandle {

@@ -30,20 +30,22 @@ type TokenPool struct {
 }
 
 func (this *TokenPool) CloseAll() {
-	this.mu.Lock()
 	for _, v := range this.tokens {
 		v.Close()
 	}
-	this.mu.Unlock()
 }
 
 func (this *TokenPool) AddToken(token TokenHandler) {
+	//	写入token 要加锁
+	//	加锁操作O(1)的复杂度	不会引起其他阻塞
 	this.mu.Lock()
 	this.tokens[token] = token
 	this.mu.Unlock()
 }
 
 func (this *TokenPool) DeleteToken(token TokenHandler) {
+	//	删除token 要加锁
+	//	删除操作O(1)的复杂度	不会引起其他阻塞
 	this.mu.Lock()
 	delete(this.tokens, token)
 	this.mu.Unlock()
@@ -64,8 +66,6 @@ type TokenHandler interface {
 	StartRead()
 
 	Close()
-
-	OnClose(TokenHandler)
 
 	RemoteAddr() net.Addr
 
@@ -155,13 +155,14 @@ func (this *QToken) readAsync() {
 		_ = recover()
 		this.Close()
 	}()
-	b := make([]byte, BUFFER_SIZE)
+
 	for {
 		select {
 		case <-this.r_exit:
 			panic(nil)
 			return
 		default:
+			b := make([]byte, BUFFER_SIZE)
 			n, err := this.conn.Read(b) //	可引发连接异常
 			if n <= 0 || err != nil {
 				panic(err)
@@ -217,10 +218,6 @@ func (this *QToken) processRead() {
 
 }
 
-func (this *QToken) OnClose(handle TokenHandler) {
-	this.onClose(handle)
-}
-
 func (this *QToken) Close() {
 	this.close_once.Do(func() {
 		close(this.r_exit) //	关闭对远端数据流的处理		影响到processRead方法		放弃从管道中读入数据并退出
@@ -239,11 +236,11 @@ func (this *QToken) Close() {
 
 			}
 		})
-
 		this.task_group.Wait() //	等待该客户端所有任务	goroutuines	退出
+
 		close(this.r_chan)     //	关闭处理数据流管道
 		close(this.w_chan)     //	关闭发送数据流管道
-		this.OnClose(this)
+		this.onClose(this)
 	})
 
 }

@@ -62,7 +62,7 @@ func (this *QClient) Close() {
 
 		close(this.r_chan) //	关闭处理数据流管道
 		close(this.w_chan) //	关闭发送数据流管道
-		this.onClose()
+		this.close_callback(this)
 	})
 
 }
@@ -211,8 +211,4 @@ func (this *QClient) StartRead() {
 
 func (this *QClient) read(b []byte) (int, error) {
 	return this.conn.Read(b)
-}
-
-func (this *QClient) onClose() {
-	this.close_callback(this)
 }
