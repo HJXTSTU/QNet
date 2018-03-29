@@ -7,7 +7,7 @@ import (
 )
 
 const(
-	DEFAULT_LIMIT = 1024
+	DEFAULT_LIMIT = 2048
 )
 
 type AcceptFunc func(conn net.Conn)
