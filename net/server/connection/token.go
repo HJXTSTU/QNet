@@ -94,7 +94,7 @@ type QToken struct {
 }
 
 func (this *QToken) Write(b []byte) {
-	defer func(){
+	defer func() {
 		_ = recover()
 	}()
 	select {
@@ -155,14 +155,13 @@ func (this *QToken) readAsync() {
 		_ = recover()
 		this.Close()
 	}()
-
+	b := make([]byte, BUFFER_SIZE)
 	for {
 		select {
 		case <-this.r_exit:
 			panic(nil)
 			return
 		default:
-			b := make([]byte, BUFFER_SIZE)
 			n, err := this.conn.Read(b) //	可引发连接异常
 			if n <= 0 || err != nil {
 				panic(err)
@@ -219,9 +218,7 @@ func (this *QToken) processRead() {
 }
 
 func (this *QToken) OnClose(handle TokenHandler) {
-	ctrl.StartGoroutines(func() {
-		this.onClose(handle)
-	})
+	this.onClose(handle)
 }
 
 func (this *QToken) Close() {
@@ -231,21 +228,21 @@ func (this *QToken) Close() {
 		this.conn.Close()  //	关闭连接，readAsync,sendAsync会触发异常并退出
 		//	清理w_chan
 		ctrl.StartGoroutines(func() {
-			for  _ = range this.w_chan{
+			for _ = range this.w_chan {
 
 			}
 		})
 
 		//	清理r_chan
 		ctrl.StartGoroutines(func() {
-			for  _ = range this.r_chan{
+			for _ = range this.r_chan {
 
 			}
 		})
 
 		this.task_group.Wait() //	等待该客户端所有任务	goroutuines	退出
-		close(this.r_chan) //	关闭处理数据流管道
-		close(this.w_chan) //	关闭发送数据流管道
+		close(this.r_chan)     //	关闭处理数据流管道
+		close(this.w_chan)     //	关闭发送数据流管道
 		this.OnClose(this)
 	})
 

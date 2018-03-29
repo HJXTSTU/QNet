@@ -56,12 +56,12 @@ func (this *QClient) Close() {
 		close(this.r_exit) //	关闭对远端数据流的处理		影响到processRead方法		放弃从管道中读入数据并退出
 		close(this.w_exit) //	对上层应用关闭输入口	影响到Write方法	针对准备写入数据时被阻塞的goroutine
 
-		this.conn.Close()  //	关闭连接，readAsync,sendAsync会触发异常并退出
+		this.conn.Close() //	关闭连接，readAsync,sendAsync会触发异常并退出
 
-		this.task_group.Wait()	//	等待该客户端所有任务	goroutuines	退出
+		this.task_group.Wait() //	等待该客户端所有任务	goroutuines	退出
 
-		close(this.r_chan)		//	关闭处理数据流管道
-		close(this.w_chan)		//	关闭发送数据流管道
+		close(this.r_chan) //	关闭处理数据流管道
+		close(this.w_chan) //	关闭发送数据流管道
 		this.onClose()
 	})
 
@@ -107,7 +107,7 @@ func (this *QClient) StartSend() {
 }
 
 func (this *QClient) Write(b []byte) {
-	defer func(){
+	defer func() {
 		_ = recover()
 	}()
 	select {
@@ -147,14 +147,14 @@ func (this *QClient) readAsync() {
 		_ = recover()
 		this.Close()
 	}()
-
+	b := make([]byte, BUFFER_SIZE)
 	for {
 		select {
 		case <-this.r_exit:
 			panic(nil)
 			return
 		default:
-			b := make([]byte, BUFFER_SIZE)
+
 			n, err := this.conn.Read(b) //	可引发连接异常
 			if n <= 0 || err != nil {
 				panic(err)
@@ -214,7 +214,5 @@ func (this *QClient) read(b []byte) (int, error) {
 }
 
 func (this *QClient) onClose() {
-	ctrl.StartGoroutines(func() {
-		this.close_callback(this)
-	})
+	this.close_callback(this)
 }
