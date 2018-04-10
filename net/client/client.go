@@ -147,14 +147,14 @@ func (this *QClient) readAsync() {
 		_ = recover()
 		this.Close()
 	}()
-	b := make([]byte, BUFFER_SIZE)
+
 	for {
 		select {
 		case <-this.r_exit:
 			panic(nil)
 			return
 		default:
-
+			b := make([]byte, BUFFER_SIZE)
 			n, err := this.conn.Read(b) //	可引发连接异常
 			if n <= 0 || err != nil {
 				panic(err)
