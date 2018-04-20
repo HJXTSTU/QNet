@@ -130,6 +130,8 @@ type StreamBuffer interface {
 	Empty() bool
 
 	Undo()
+
+	Copy()StreamBuffer
 }
 
 type stream struct {
@@ -138,6 +140,15 @@ type stream struct {
 	cur int
 
 	undoOffset int
+}
+
+
+func (this *stream)Copy()StreamBuffer{
+	s := NewStreamBuffer()
+	b := make([]byte,this.Len())
+	copy(b,this.buf[this.cur:this.off])
+	s.Append(b)
+	return s
 }
 
 func (this *stream) mem() {
