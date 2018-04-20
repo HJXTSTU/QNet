@@ -72,6 +72,8 @@ type TokenHandler interface {
 	StartSend()
 
 	Write([]byte)
+
+	IsClosed() bool
 }
 
 type RChan chan []byte
@@ -91,6 +93,8 @@ type QToken struct {
 
 	task_group sync.WaitGroup
 	close_once sync.Once
+
+	closed	bool
 }
 
 func (this *QToken) Write(b []byte) {
@@ -218,6 +222,10 @@ func (this *QToken) processRead() {
 
 }
 
+func (this *QToken)IsClosed()bool{
+	return this.closed
+}
+
 func (this *QToken) Close() {
 	this.close_once.Do(func() {
 		close(this.r_exit) //	关闭对远端数据流的处理		影响到processRead方法		放弃从管道中读入数据并退出
@@ -241,6 +249,7 @@ func (this *QToken) Close() {
 		close(this.r_chan)     //	关闭处理数据流管道
 		close(this.w_chan)     //	关闭发送数据流管道
 		this.onClose(this)
+		this.closed=true
 	})
 
 }
@@ -257,6 +266,7 @@ func NewQToken(conn net.Conn, onRead ReadCallback, onClose CloseCallback) *QToke
 		make(WChan, WCHAN_SIZE),
 		sync.WaitGroup{},
 		sync.Once{},
+		 false,
 	}
 	token.task_group.Add(3)
 	return &token
