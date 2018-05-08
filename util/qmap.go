@@ -18,6 +18,15 @@ func (this *QMap)Range(f RangeFunc){
 	}
 }
 
+func (this *QMap)NonBlockRange(f RangeFunc){
+	if len(this.mp)==0{
+		return
+	}
+	for k,v := range this.mp{
+		f(k,v)
+	}
+}
+
 func (this *QMap)Clear(){
 	this.mu.Lock()
 	defer this.mu.Unlock()
