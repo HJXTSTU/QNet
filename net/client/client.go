@@ -6,7 +6,6 @@ import (
 	"net"
 	"wwt/ctrl"
 	"sync"
-
 )
 
 const (
@@ -160,12 +159,8 @@ func (this *QClient) readAsync() {
 			if n <= 0 || err != nil {
 				panic(err)
 				return
-			}else if n == 4{
-				//	心跳包
-				log.Println("Heart beat package from: ",this.RemoteAddr())
-			}else {
-				this.r_chan <- b[:n]
 			}
+			this.r_chan <- b[:n]
 		}
 	}
 }
@@ -187,9 +182,12 @@ func (this *QClient) processRead() {
 				for this.r_stream.Len() > 4 {
 					length := this.r_stream.ReadInt()
 					//	数据包已经完整
-					if !this.r_stream.Empty() && length <= this.r_stream.Len() {
+					if !this.r_stream.Empty() && length <= this.r_stream.Len() && length > 0 {
 						data := this.r_stream.ReadNBytes(length)
 						this.read_callback(this, length, data)
+					} else if length==0{
+						//	心跳包
+						log.Printf("Heart beat from host: %s.\n",this.RemoteAddr())
 					} else {
 						this.r_stream.Undo()
 						break
