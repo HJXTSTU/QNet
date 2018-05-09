@@ -6,6 +6,7 @@ import (
 	"net"
 	"wwt/ctrl"
 	"sync"
+
 )
 
 const (
@@ -159,8 +160,12 @@ func (this *QClient) readAsync() {
 			if n <= 0 || err != nil {
 				panic(err)
 				return
+			}else if n == 4{
+				//	心跳包
+				log.Println("Heart beat package from: ",this.RemoteAddr())
+			}else {
+				this.r_chan <- b[:n]
 			}
-			this.r_chan <- b[:n]
 		}
 	}
 }

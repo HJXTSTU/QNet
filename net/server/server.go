@@ -3,12 +3,13 @@ package server
 import (
 	"wwt/net/server/listener"
 	"wwt/net/server/connection"
+	"wwt/ctrl"
+	"time"
 	"net"
 	"log"
 )
 
 type QServerHandle interface {
-
 	AsyncListen()
 
 	SyncListen()
@@ -16,23 +17,27 @@ type QServerHandle interface {
 	Close()
 
 	SetProcesser(ProcesseFunc)
+
+	HeartbeatStart()
 }
 
-type ProcesseFunc	func(connection.TokenHandler, int, []byte)
+type ProcesseFunc func(connection.TokenHandler, int, []byte)
 
 type QWriter interface {
 	Send([]byte)
 }
 
 type QServer struct {
-	listener  listener.ListenerHandle
-	tokens    connection.TokenPoolHandler
+	listener     listener.ListenerHandle
+	tokens       connection.TokenPoolHandler
 	processeFunc ProcesseFunc
+	closed       bool
 }
 
-func (this *QServer)Close(){
+func (this *QServer) Close() {
 	this.tokens.CloseAll()
 	this.listener.Close()
+	this.closed = true
 }
 
 func (this *QServer) AsyncListen() {
@@ -48,7 +53,7 @@ func (this *QServer) onAccept(conn net.Conn) {
 	this.tokens.AddToken(token)
 	token.StartRead()
 	token.StartSend()
-	log.Printf("QServer %p: New connection enter %s. Create token %p.\n",this,token.RemoteAddr(),&token)
+	log.Printf("QServer %p: New connection enter %s. Create token %p.\n", this, token.RemoteAddr(), &token)
 }
 
 func (this *QServer) onRead(handle connection.TokenHandler, n int, bytes []byte) {
@@ -64,8 +69,24 @@ func (this *QServer) onClose(handle connection.TokenHandler) {
 	//handle.Close()
 	this.tokens.DeleteToken(handle)
 	this.listener.ReleaseConn()
-	log.Printf("QServer %p: Delete token %p. Remain: %d.\n",this,&handle,this.tokens.Len())
+	log.Printf("QServer %p: Delete token %p. Remain: %d.\n", this, &handle, this.tokens.Len())
 	//fmt.Println("Remain:",this.tokens.Len())
+}
+
+func (this *QServer)HeartbeatStart() {
+	ctrl.StartGoroutines(func() {
+		beatpkg := make([]byte,0)
+		for !this.closed{
+			time.Sleep(time.Minute*10)
+			if this.closed{
+				break
+			}
+			this.tokens.Range(func(token connection.TokenHandler) {
+				token.Write(beatpkg)
+			})
+		}
+	})
+
 }
 
 func NewQServer(address string) QServerHandle {

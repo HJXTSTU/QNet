@@ -16,9 +16,11 @@ const (
 type ReadCallback func(TokenHandler, int, []byte)
 type CloseCallback func(TokenHandler)
 type SendCallback func(TokenHandler, []byte, int, error)
+type RangeTokensFunc func(TokenHandler)
 
 type TokenPoolHandler interface {
 	AddToken(token TokenHandler)
+	Range(f RangeTokensFunc)
 	DeleteToken(token TokenHandler)
 	CloseAll()
 	Len() int
@@ -27,6 +29,14 @@ type TokenPoolHandler interface {
 type TokenPool struct {
 	tokens map[TokenHandler]TokenHandler
 	mu     sync.Mutex
+}
+
+func (this *TokenPool)Range(f RangeTokensFunc){
+	this.mu.Lock()
+	defer this.mu.Unlock()
+	for k,_ := range this.tokens{
+		f(k)
+	}
 }
 
 func (this *TokenPool) CloseAll() {
