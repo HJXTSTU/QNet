@@ -54,20 +54,44 @@ func (this *QHeap) findInsertNode() *HeapNode {
 		}
 		res = now
 	} else {
-		queue := queue.NewQueue()
-		queue.Enqueue(this.Root)
-		for queue.Size() > 0 {
-			now := queue.Dequeue().(*HeapNode)
-			if now.Left == nil || now.Right == nil {
-				res = now
-				break
+		//queue := queue.NewQueue()
+		//queue.Enqueue(this.Root)
+		//for queue.Size() > 0 {
+		//	now := queue.Dequeue().(*HeapNode)
+		//	if now.Left == nil || now.Right == nil {
+		//		res = now
+		//		break
+		//	}
+		//	if now.Left != nil {
+		//		queue.Enqueue(now.Left)
+		//	}
+		//	if now.Right != nil {
+		//		queue.Enqueue(now.Right)
+		//	}
+		//}
+		c := this.Last
+		pc := c.Parent
+		if pc.Left==c{
+			//	c 是 pc 的 左子节点
+			//	则 pc 一定不满
+			res = pc
+		}else {
+			//	c 是 pc 的 右子节点
+			//	pc 一定满
+
+			//	遍历整棵树，寻找pc的右兄弟
+			ppc := pc.Parent
+			//	寻找拐点
+			for ppc != nil && pc == ppc.Right {
+				c = pc
+				pc = pc.Parent
+				ppc = pc.Parent
 			}
-			if now.Left != nil {
-				queue.Enqueue(now.Left)
+			c = ppc.Right
+			for c.Left != nil {
+				c = c.Left
 			}
-			if now.Right != nil {
-				queue.Enqueue(now.Right)
-			}
+			res = c
 		}
 	}
 	return res
